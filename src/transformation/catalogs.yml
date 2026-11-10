@@ -1,0 +1,9 @@
+catalogs:
+  - name: nessie_catalog
+    type: iceberg_rest
+    table_format: iceberg
+    config:
+      duckdb:
+        endpoint: "{{ env_var('NESSIE_ENDPOINT', 'http://nessie:19120/iceberg') }}"
+        authorization_type: "none"
+        warehouse: "{{ env_var('NESSIE_WAREHOUSE', 'lakehouse') }}"

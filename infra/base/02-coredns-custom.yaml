@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: coredns-custom
+    app.kubernetes.io/part-of: duckpipe
+data:
+  # Tạo server block riêng chuyển tiếp toàn bộ truy vấn *.amazonaws.com ra DNS công cộng
+  aws-s3.server: |
+    amazonaws.com:53 {
+        errors
+        cache 30
+        forward . 8.8.8.8 1.1.1.1
+    }

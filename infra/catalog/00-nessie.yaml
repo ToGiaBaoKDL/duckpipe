@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nessie-storage
+  namespace: duckpipe
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nessie
+  namespace: duckpipe
+  labels:
+    app: nessie
+    app.kubernetes.io/component: catalog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nessie
+  template:
+    metadata:
+      labels:
+        app: nessie
+    spec:
+      nodeSelector:
+        workload: serving
+      securityContext:
+        fsGroup: 185
+      containers:
+        - name: nessie
+          image: ghcr.io/projectnessie/nessie:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 19120
+          envFrom:
+            - configMapRef:
+                name: aws-config
+            - secretRef:
+                name: aws-credentials
+          env:
+            - name: NESSIE_VERSION_STORE_TYPE
+              value: "ROCKSDB"
+            - name: NESSIE_VERSION_STORE_ROCKSDB_STORAGE_DIR
+              value: "/nessie/storage"
+            - name: NESSIE_CATALOG_DEFAULT_WAREHOUSE
+              value: "lakehouse"
+            - name: NESSIE_CATALOG_WAREHOUSES_LAKEHOUSE_LOCATION
+              value: "s3://timo-prod-dl-analytics-vt77zs/ap_itde/.warehouse/"
+            - name: NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_AUTH_TYPE
+              value: "APPLICATION_GLOBAL"
+            - name: NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_REGION
+              value: "ap-southeast-1"
+          volumeMounts:
+            - name: storage
+              mountPath: /nessie/storage
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          readinessProbe:
+            httpGet:
+              path: /api/v1/config
+              port: 19120
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/v1/config
+              port: 19120
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: nessie-storage
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nessie
+  namespace: duckpipe
+  labels:
+    app: nessie
+spec:
+  selector:
+    app: nessie
+  ports:
+    - name: http
+      protocol: TCP
+      port: 19120
+      targetPort: 19120

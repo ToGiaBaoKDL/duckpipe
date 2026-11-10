@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: duckpipe-ingestion-job
+  namespace: duckpipe
+  labels:
+    app.kubernetes.io/name: duckpipe-ingestion
+    app.kubernetes.io/component: ingestion
+    app.kubernetes.io/part-of: duckpipe
+spec:
+  # Số lần thử lại tối đa nếu script bị lỗi trước khi đánh dấu là Job Failed
+  backoffLimit: 2
+  
+  # Tự động dọn dẹp xóa cả Job và Pod sau khi hoàn thành 5 phút (300 giây)
+  ttlSecondsAfterFinished: 300
+  
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: duckpipe-ingestion
+        app.kubernetes.io/component: ingestion
+        app.kubernetes.io/part-of: duckpipe
+    spec:
+      nodeSelector:
+        workload: batch
+      # Đối với Job: không dùng Always, chỉ dùng OnFailure hoặc Never
+      restartPolicy: OnFailure
+      
+      containers:
+        - name: ingestion
+          image: localhost:5001/duckpipe-ingest
+          # IfNotPresent: Ưu tiên dùng image đã nạp sẵn trong cụm k3d, không kéo từ internet
+          imagePullPolicy: IfNotPresent
+          
+          # Tự động nạp toàn bộ cấu hình từ ConfigMap và Secret vào biến môi trường
+          envFrom:
+            - configMapRef:
+                name: aws-config
+            - secretRef:
+                name: aws-credentials
+          env:
+            - name: NESSIE_ENDPOINT
+              value: "http://nessie:19120/iceberg"
+                
+          # Giới hạn tài nguyên để bảo vệ cụm K8s
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

@@ -1,0 +1,95 @@
+apiVersion: skaffold/v4beta11
+kind: Config
+metadata:
+  name: duckpipe
+
+build:
+  # Tự động sinh tag theo mã băm nội dung source code
+  tagPolicy:
+    inputDigest: {}
+  local:
+    useDockerCLI: true
+    useBuildkit: true
+    # Tự động push lên K3d Local Container Registry (localhost:5001)
+    push: true
+    concurrency: 1
+
+profiles:
+  # 0. Profile CATALOG: Triển khai Project Nessie Iceberg REST Catalog
+  - name: catalog
+    manifests:
+      rawYaml:
+        - infra/catalog/00-nessie.yaml
+
+  # 0.1 Profile SERVING: Triển khai ClickHouse Query Engine
+  - name: serving
+    manifests:
+      rawYaml:
+        - infra/serving/00-clickhouse.yaml
+
+  # 1. Profile INGEST: Chỉ build và kích hoạt tầng Ingestion
+  - name: ingest
+    build:
+      tagPolicy:
+        inputDigest: {}
+      local:
+        useDockerCLI: true
+        useBuildkit: true
+        push: true
+        concurrency: 1
+      artifacts:
+        - image: localhost:5001/duckpipe-ingest
+          context: src/ingestion
+          docker:
+            dockerfile: Dockerfile
+    manifests:
+      rawYaml:
+        - infra/ingestion/00-job-ingest.yaml
+
+  # 2. Profile DBT: Chỉ build và kích hoạt tầng Transformation (dbt)
+  - name: dbt
+    build:
+      tagPolicy:
+        inputDigest: {}
+      local:
+        useDockerCLI: true
+        useBuildkit: true
+        push: true
+        concurrency: 1
+      artifacts:
+        - image: localhost:5001/duckpipe-dbt
+          context: src/transformation
+          docker:
+            dockerfile: Dockerfile
+    manifests:
+      rawYaml:
+        - infra/transformation/00-job-dbt.yaml
+
+  # 3. Profile ALL: Khởi tạo đầy đủ hạ tầng cơ sở và chạy cả 2 tầng tuần tự
+  - name: all
+    build:
+      tagPolicy:
+        inputDigest: {}
+      local:
+        useDockerCLI: true
+        useBuildkit: true
+        push: true
+        concurrency: 1
+      artifacts:
+        - image: localhost:5001/duckpipe-ingest
+          context: src/ingestion
+          docker:
+            dockerfile: Dockerfile
+        - image: localhost:5001/duckpipe-dbt
+          context: src/transformation
+          docker:
+            dockerfile: Dockerfile
+    manifests:
+      rawYaml:
+        - infra/base/00-namespace.yaml
+        - infra/base/01-configmap-aws.yaml
+        - infra/base/02-coredns-custom.yaml
+        - infra/catalog/00-nessie.yaml
+        - infra/serving/00-clickhouse.yaml
+        - infra/ingestion/00-job-ingest.yaml
+        - infra/transformation/00-job-dbt.yaml

@@ -1,0 +1,117 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-config
+  namespace: duckpipe
+  labels:
+    app: clickhouse
+    app.kubernetes.io/component: serving
+data:
+  # Cấu hình bật tính năng Iceberg REST Catalog và dùng S3 server credentials cho user default
+  iceberg-profile.xml: |
+    <clickhouse>
+        <profiles>
+            <default>
+                <allow_database_iceberg>1</allow_database_iceberg>
+                <s3_allow_server_credentials_in_user_queries>1</s3_allow_server_credentials_in_user_queries>
+            </default>
+        </profiles>
+    </clickhouse>
+  init-lakehouse.sql: |
+    CREATE DATABASE IF NOT EXISTS lakehouse
+    ENGINE = DataLakeCatalog('http://nessie:19120/iceberg')
+    SETTINGS catalog_type = 'rest', warehouse = 'lakehouse';
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clickhouse
+  namespace: duckpipe
+  labels:
+    app: clickhouse
+    app.kubernetes.io/component: serving
+    app.kubernetes.io/part-of: duckpipe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+        app.kubernetes.io/component: serving
+        app.kubernetes.io/part-of: duckpipe
+    spec:
+      # Định tuyến Pod ClickHouse chạy trên node chuyên serving (agent-0)
+      nodeSelector:
+        workload: serving
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:26.8-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8123
+            - name: native
+              containerPort: 9000
+          envFrom:
+            - configMapRef:
+                name: aws-config
+            - secretRef:
+                name: aws-credentials
+          env:
+            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+              value: "1"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1.5Gi"
+          volumeMounts:
+            - name: config-users
+              mountPath: /etc/clickhouse-server/users.d/iceberg.xml
+              subPath: iceberg-profile.xml
+            - name: config-users
+              mountPath: /docker-entrypoint-initdb.d/init-lakehouse.sql
+              subPath: init-lakehouse.sql
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 8123
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: config-users
+          configMap:
+            name: clickhouse-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  namespace: duckpipe
+  labels:
+    app: clickhouse
+    app.kubernetes.io/component: serving
+    app.kubernetes.io/part-of: duckpipe
+spec:
+  selector:
+    app: clickhouse
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8123
+      targetPort: 8123
+    - name: native
+      protocol: TCP
+      port: 9000
+      targetPort: 9000

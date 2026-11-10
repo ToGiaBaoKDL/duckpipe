@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: duckpipe
+  labels:
+    app.kubernetes.io/name: duckpipe
+    app.kubernetes.io/part-of: duckpipe

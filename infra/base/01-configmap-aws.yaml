@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-config
+  namespace: duckpipe
+  labels:
+    app.kubernetes.io/name: aws-config
+    app.kubernetes.io/part-of: duckpipe
+data:
+  AWS_REGION: "ap-southeast-1"
+  S3_BUCKET: "timo-prod-dl-analytics-vt77zs"
+  NESSIE_ENDPOINT: "http://nessie:19120/iceberg"
+  NESSIE_WAREHOUSE: "lakehouse"

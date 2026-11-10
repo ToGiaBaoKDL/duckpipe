@@ -1,0 +1,47 @@
+version: 2
+
+models:
+  - name: customers
+    description: "Bảng dữ liệu khách hàng tầng Silver đã được làm sạch và chuẩn hóa."
+    columns:
+      - name: customer_id
+        description: "Khóa chính duy nhất định danh khách hàng."
+        data_tests:
+          - not_null
+          - unique
+      - name: email
+        description: "Địa chỉ email của khách hàng."
+        data_tests:
+          - not_null
+      - name: country_code
+        description: "Mã quốc gia."
+        data_tests:
+          - not_null
+
+  - name: orders
+    description: "Bảng dữ liệu đơn hàng tầng Silver."
+    columns:
+      - name: order_id
+        description: "Khóa chính duy nhất của mỗi đơn hàng."
+        data_tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: "Khóa ngoại liên kết tới bảng customers."
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('customers')
+                field: customer_id
+      - name: order_status
+        description: "Trạng thái đơn hàng (chỉ chấp nhận các giá trị định trước)."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['COMPLETED', 'PROCESSING', 'PENDING', 'CANCELLED', 'REFUNDED']
+      - name: total_amount
+        description: "Tổng tiền của đơn hàng."
+        data_tests:
+          - not_null

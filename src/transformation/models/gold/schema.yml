@@ -1,0 +1,47 @@
+version: 2
+
+models:
+  - name: dim_customer_summary
+    description: "Bảng chiều tổng hợp hành vi và phân khúc khách hàng."
+    columns:
+      - name: customer_id
+        description: "Khóa chính duy nhất của khách hàng."
+        data_tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: ref('customers')
+                field: customer_id
+      - name: customer_tier
+        description: "Phân hạng khách hàng (VIP, REGULAR, BRONZE, INACTIVE)."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['VIP', 'REGULAR', 'BRONZE', 'INACTIVE']
+      - name: total_spent
+        description: "Tổng chi tiêu tích lũy của khách hàng."
+        data_tests:
+          - not_null
+      - name: total_orders
+        description: "Tổng số đơn hàng đã đặt."
+        data_tests:
+          - not_null
+
+  - name: fct_daily_sales
+    description: "Bảng fact báo cáo doanh thu tổng hợp theo từng ngày."
+    columns:
+      - name: order_date
+        description: "Khóa ngày báo cáo."
+        data_tests:
+          - not_null
+          - unique
+      - name: total_revenue
+        description: "Tổng doanh thu trong ngày."
+        data_tests:
+          - not_null
+      - name: total_orders
+        description: "Tổng số đơn hàng phát sinh trong ngày."
+        data_tests:
+          - not_null

@@ -1,0 +1,30 @@
+name: 'duckpipe_transform'
+version: '1.0.0'
+config-version: 2
+
+profile: 'duckpipe'
+
+flags:
+  use_catalogs_v2: true
+  send_anonymous_usage_stats: false
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  duckpipe_transform:
+    staging:
+      +materialized: view
+    silver:
+      +catalog_name: nessie_catalog
+      +schema: duckpipe_silver
+      +materialized: table
+    gold:
+      +catalog_name: nessie_catalog
+      +schema: duckpipe_gold
+      +materialized: table

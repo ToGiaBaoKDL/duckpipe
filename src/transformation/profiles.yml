@@ -1,0 +1,18 @@
+duckpipe:
+  target: prod
+  outputs:
+    prod:
+      type: duckdb
+      path: /tmp/duckdb_scratch/workspace.duckdb
+      memory_limit: '350MB'
+      threads: 2
+      extensions:
+        - httpfs
+        - aws
+        - parquet
+        - iceberg
+        - avro
+      secrets:
+        - type: s3
+          provider: credential_chain
+          region: "{{ env_var('AWS_REGION', 'ap-southeast-1') }}"

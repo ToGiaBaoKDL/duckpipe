@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: duckpipe_bronze
+    database: nessie_catalog
+    schema: duckpipe_bronze
+    description: "Các bảng Iceberg nguồn Bronze nằm trực tiếp trong Nessie Catalog schema duckpipe_bronze"
+    tables:
+      - name: customers
+        description: "Bảng dữ liệu khách hàng thô (Iceberg format)"
+      - name: orders
+        description: "Bảng dữ liệu đơn hàng thô (Iceberg format)"
