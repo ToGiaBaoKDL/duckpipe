@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: airflow-sa
+  namespace: duckpipe
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/component: orchestration
+    app.kubernetes.io/part-of: duckpipe
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-pod-manager-role
+  namespace: duckpipe
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/component: orchestration
+    app.kubernetes.io/part-of: duckpipe
+rules:
+  # Cho phép Airflow tạo, quản lý, theo dõi và lấy logs của các Pods (KubernetesPodOperator)
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/exec", "pods/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-pod-manager-rolebinding
+  namespace: duckpipe
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/component: orchestration
+    app.kubernetes.io/part-of: duckpipe
+subjects:
+  - kind: ServiceAccount
+    name: airflow-sa
+    namespace: duckpipe
+roleRef:
+  kind: Role
+  name: airflow-pod-manager-role
+  apiGroup: rbac.authorization.k8s.io

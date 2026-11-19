@@ -29,17 +29,13 @@ spec:
           image: localhost:5001/duckpipe-dbt
           imagePullPolicy: IfNotPresent
           
-          # Tự động nạp cấu hình S3 Bucket, Region và AWS Credentials
+          # Tự động nạp cấu hình S3 Bucket, Region, Nessie và AWS Credentials
           envFrom:
             - configMapRef:
                 name: aws-config
             - secretRef:
                 name: aws-credentials
           env:
-            - name: NESSIE_ENDPOINT
-              value: "http://nessie:19120/iceberg"
-            - name: DBT_SEND_ANONYMOUS_USAGE_STATS
-              value: "false"
             - name: DO_NOT_TRACK
               value: "1"
                 

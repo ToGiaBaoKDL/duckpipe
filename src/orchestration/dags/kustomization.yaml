@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: duckpipe
+
+labels:
+  - includeSelectors: false
+    includeTemplates: false
+    pairs:
+      app.kubernetes.io/name: airflow
+      app.kubernetes.io/component: orchestration-dags
+      app.kubernetes.io/part-of: duckpipe
+
+# Giữ nguyên tên ConfigMap "airflow-dags" để update DAG tại chỗ mà không trigger restart Pod Airflow
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: airflow-dags
+    files:
+      - elt_k8spod_lakehouse_pipeline.py

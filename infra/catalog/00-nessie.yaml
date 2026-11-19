@@ -3,6 +3,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: nessie-storage
   namespace: duckpipe
+  labels:
+    app.kubernetes.io/name: nessie
+    app.kubernetes.io/component: catalog
+    app.kubernetes.io/part-of: duckpipe
 spec:
   accessModes:
     - ReadWriteOnce
@@ -17,7 +21,9 @@ metadata:
   namespace: duckpipe
   labels:
     app: nessie
+    app.kubernetes.io/name: nessie
     app.kubernetes.io/component: catalog
+    app.kubernetes.io/part-of: duckpipe
 spec:
   replicas: 1
   selector:
@@ -27,6 +33,9 @@ spec:
     metadata:
       labels:
         app: nessie
+        app.kubernetes.io/name: nessie
+        app.kubernetes.io/component: catalog
+        app.kubernetes.io/part-of: duckpipe
     spec:
       nodeSelector:
         workload: serving
@@ -34,7 +43,7 @@ spec:
         fsGroup: 185
       containers:
         - name: nessie
-          image: ghcr.io/projectnessie/nessie:latest
+          image: ghcr.io/projectnessie/nessie:0.110.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -49,14 +58,15 @@ spec:
               value: "ROCKSDB"
             - name: NESSIE_VERSION_STORE_ROCKSDB_STORAGE_DIR
               value: "/nessie/storage"
+            # Kế thừa cấu hình từ aws-config (đã nạp qua envFrom)
             - name: NESSIE_CATALOG_DEFAULT_WAREHOUSE
-              value: "lakehouse"
+              value: "$(NESSIE_WAREHOUSE)"
             - name: NESSIE_CATALOG_WAREHOUSES_LAKEHOUSE_LOCATION
-              value: "s3://timo-prod-dl-analytics-vt77zs/ap_itde/.warehouse/"
+              value: "s3://$(S3_BUCKET)/ap_itde/.warehouse/"
             - name: NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_AUTH_TYPE
               value: "APPLICATION_GLOBAL"
             - name: NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_REGION
-              value: "ap-southeast-1"
+              value: "$(AWS_REGION)"
           volumeMounts:
             - name: storage
               mountPath: /nessie/storage
@@ -91,6 +101,9 @@ metadata:
   namespace: duckpipe
   labels:
     app: nessie
+    app.kubernetes.io/name: nessie
+    app.kubernetes.io/component: catalog
+    app.kubernetes.io/part-of: duckpipe
 spec:
   selector:
     app: nessie

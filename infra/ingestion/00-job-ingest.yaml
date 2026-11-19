@@ -38,9 +38,6 @@ spec:
                 name: aws-config
             - secretRef:
                 name: aws-credentials
-          env:
-            - name: NESSIE_ENDPOINT
-              value: "http://nessie:19120/iceberg"
                 
           # Giới hạn tài nguyên để bảo vệ cụm K8s
           resources:

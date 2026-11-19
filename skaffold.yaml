@@ -25,6 +25,7 @@ profiles:
   - name: serving
     manifests:
       rawYaml:
+        - infra/serving/01-clickhouse-secret.yaml
         - infra/serving/00-clickhouse.yaml
 
   # 1. Profile INGEST: Chỉ build và kích hoạt tầng Ingestion
@@ -42,6 +43,13 @@ profiles:
           context: src/ingestion
           docker:
             dockerfile: Dockerfile
+          hooks:
+            after:
+              - command:
+                  - sh
+                  - -c
+                  - docker tag "$SKAFFOLD_IMAGE" "$SKAFFOLD_IMAGE_REPO:latest" && docker push "$SKAFFOLD_IMAGE_REPO:latest"
+                os: [linux, darwin]
     manifests:
       rawYaml:
         - infra/ingestion/00-job-ingest.yaml
@@ -61,11 +69,46 @@ profiles:
           context: src/transformation
           docker:
             dockerfile: Dockerfile
+          hooks:
+            after:
+              - command:
+                  - sh
+                  - -c
+                  - docker tag "$SKAFFOLD_IMAGE" "$SKAFFOLD_IMAGE_REPO:latest" && docker push "$SKAFFOLD_IMAGE_REPO:latest"
+                os: [linux, darwin]
     manifests:
       rawYaml:
         - infra/transformation/00-job-dbt.yaml
 
-  # 3. Profile ALL: Khởi tạo đầy đủ hạ tầng cơ sở và chạy cả 2 tầng tuần tự
+  # 3. Profile ORCHESTRATION: Triển khai Apache Airflow 3 + Kustomize Config/DAGs
+  - name: orchestration
+    build:
+      tagPolicy:
+        inputDigest: {}
+      local:
+        useDockerCLI: true
+        useBuildkit: true
+        push: true
+        concurrency: 1
+      artifacts:
+        - image: localhost:5001/duckpipe-airflow
+          context: src/orchestration
+          docker:
+            dockerfile: Dockerfile
+    manifests:
+      kustomize:
+        paths:
+          - infra/orchestration
+          - src/orchestration/dags
+
+  # 3.1 Profile DAGS: Chỉ đồng bộ mã nguồn DAG qua Kustomize (không rebuild image, không restart Pod)
+  - name: dags
+    manifests:
+      kustomize:
+        paths:
+          - src/orchestration/dags
+
+  # 4. Profile ALL: Khởi tạo đầy đủ toàn bộ Lakehouse Platform
   - name: all
     build:
       tagPolicy:
@@ -80,8 +123,26 @@ profiles:
           context: src/ingestion
           docker:
             dockerfile: Dockerfile
+          hooks:
+            after:
+              - command:
+                  - sh
+                  - -c
+                  - docker tag "$SKAFFOLD_IMAGE" "$SKAFFOLD_IMAGE_REPO:latest" && docker push "$SKAFFOLD_IMAGE_REPO:latest"
+                os: [linux, darwin]
         - image: localhost:5001/duckpipe-dbt
           context: src/transformation
+          docker:
+            dockerfile: Dockerfile
+          hooks:
+            after:
+              - command:
+                  - sh
+                  - -c
+                  - docker tag "$SKAFFOLD_IMAGE" "$SKAFFOLD_IMAGE_REPO:latest" && docker push "$SKAFFOLD_IMAGE_REPO:latest"
+                os: [linux, darwin]
+        - image: localhost:5001/duckpipe-airflow
+          context: src/orchestration
           docker:
             dockerfile: Dockerfile
     manifests:
@@ -90,6 +151,9 @@ profiles:
         - infra/base/01-configmap-aws.yaml
         - infra/base/02-coredns-custom.yaml
         - infra/catalog/00-nessie.yaml
+        - infra/serving/01-clickhouse-secret.yaml
         - infra/serving/00-clickhouse.yaml
-        - infra/ingestion/00-job-ingest.yaml
-        - infra/transformation/00-job-dbt.yaml
+      kustomize:
+        paths:
+          - infra/orchestration
+          - src/orchestration/dags

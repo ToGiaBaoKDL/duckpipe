@@ -1,0 +1,234 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow
+  namespace: duckpipe
+  labels:
+    app: airflow
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/component: orchestration
+    app.kubernetes.io/part-of: duckpipe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow
+  template:
+    metadata:
+      labels:
+        app: airflow
+        app.kubernetes.io/name: airflow
+        app.kubernetes.io/component: orchestration
+        app.kubernetes.io/part-of: duckpipe
+    spec:
+      serviceAccountName: airflow-sa
+      nodeSelector:
+        workload: serving
+      securityContext:
+        fsGroup: 0
+      initContainers:
+        - name: airflow-init-db
+          image: localhost:5001/duckpipe-airflow
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              python3 - <<'EOF'
+              import json
+              import os
+              import socket
+              import time
+
+              host, port = "airflow-postgres", 5432
+              print(f"Waiting for PostgreSQL ({host}:{port})...", flush=True)
+              while True:
+                  try:
+                      with socket.create_connection((host, port), timeout=2):
+                          break
+                  except OSError:
+                      time.sleep(2)
+
+              print("PostgreSQL ready. Writing SimpleAuthManager passwords file...", flush=True)
+              auth_dir = "/opt/airflow/auth"
+              os.makedirs(auth_dir, exist_ok=True)
+              passwords_file = os.path.join(auth_dir, "passwords.json")
+              with open(passwords_file, "w", encoding="utf-8") as f:
+                  json.dump({"admin": os.environ["AIRFLOW_ADMIN_PASSWORD"]}, f)
+              os.chmod(passwords_file, 0o600)
+              EOF
+              echo "Running Airflow 3 DB migrations..."
+              airflow db migrate
+              echo "DB migrations completed successfully."
+          envFrom:
+            - configMapRef:
+                name: airflow-common-env
+            - secretRef:
+                name: airflow-secrets
+          volumeMounts:
+            - name: auth-runtime
+              mountPath: /opt/airflow/auth
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      containers:
+        # 1. Unified FastAPI API-Server (UI + REST API v2 + Execution API)
+        - name: api-server
+          image: localhost:5001/duckpipe-airflow
+          imagePullPolicy: IfNotPresent
+          command: ["airflow", "api-server", "--port", "8080"]
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: airflow-common-env
+            - secretRef:
+                name: airflow-secrets
+          volumeMounts:
+            - name: config-volume
+              mountPath: /opt/airflow/config
+              readOnly: true
+            - name: dags-volume
+              mountPath: /opt/airflow/dags
+              readOnly: true
+            - name: logs-volume
+              mountPath: /opt/airflow/logs
+            - name: auth-runtime
+              mountPath: /opt/airflow/auth
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "256Mi"
+            limits:
+              cpu: "600m"
+              memory: "512Mi"
+
+        # 2. Scheduler (LocalExecutor)
+        - name: scheduler
+          image: localhost:5001/duckpipe-airflow
+          imagePullPolicy: IfNotPresent
+          command: ["airflow", "scheduler"]
+          envFrom:
+            - configMapRef:
+                name: airflow-common-env
+            - secretRef:
+                name: airflow-secrets
+          volumeMounts:
+            - name: config-volume
+              mountPath: /opt/airflow/config
+              readOnly: true
+            - name: dags-volume
+              mountPath: /opt/airflow/dags
+              readOnly: true
+            - name: logs-volume
+              mountPath: /opt/airflow/logs
+          resources:
+            requests:
+              cpu: "150m"
+              memory: "256Mi"
+            limits:
+              cpu: "600m"
+              memory: "512Mi"
+
+        # 3. Standalone DAG Processor (Airflow 3 DAG Bundles)
+        - name: dag-processor
+          image: localhost:5001/duckpipe-airflow
+          imagePullPolicy: IfNotPresent
+          command: ["airflow", "dag-processor"]
+          envFrom:
+            - configMapRef:
+                name: airflow-common-env
+            - secretRef:
+                name: airflow-secrets
+          volumeMounts:
+            - name: config-volume
+              mountPath: /opt/airflow/config
+              readOnly: true
+            - name: dags-volume
+              mountPath: /opt/airflow/dags
+              readOnly: true
+            - name: logs-volume
+              mountPath: /opt/airflow/logs
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "400m"
+              memory: "384Mi"
+
+        # 4. Triggerer (Theo dõi deferrable KubernetesPodOperator bất đồng bộ)
+        - name: triggerer
+          image: localhost:5001/duckpipe-airflow
+          imagePullPolicy: IfNotPresent
+          command: ["airflow", "triggerer"]
+          envFrom:
+            - configMapRef:
+                name: airflow-common-env
+            - secretRef:
+                name: airflow-secrets
+          volumeMounts:
+            - name: config-volume
+              mountPath: /opt/airflow/config
+              readOnly: true
+            - name: dags-volume
+              mountPath: /opt/airflow/dags
+              readOnly: true
+            - name: logs-volume
+              mountPath: /opt/airflow/logs
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+      volumes:
+        - name: config-volume
+          configMap:
+            name: airflow-config
+        - name: dags-volume
+          configMap:
+            name: airflow-dags
+        - name: logs-volume
+          emptyDir: {}
+        - name: auth-runtime
+          emptyDir:
+            medium: Memory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow
+  namespace: duckpipe
+  labels:
+    app: airflow
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/component: orchestration
+    app.kubernetes.io/part-of: duckpipe
+spec:
+  selector:
+    app: airflow
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
